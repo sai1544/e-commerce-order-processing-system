@@ -1,0 +1,58 @@
+version: '3.9'
+
+networks:
+  shopstream-net:
+    driver: bridge
+
+services:
+  user-service:
+    build:
+      context: ./services/user-service
+      target: final
+    image: ${DOCKER_USERNAME:-local}/shopstream-user:latest
+    ports: ["3001:3001"]
+    environment:
+      - NODE_ENV=development
+      - PORT=3001
+    networks: [shopstream-net]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3001/health/live"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  product-service:
+    build:
+      context: ./services/product-service
+      target: final
+    image: ${DOCKER_USERNAME:-local}/shopstream-product:latest
+    ports: ["3002:3002"]
+    environment: [NODE_ENV=development, PORT=3002]
+    networks: [shopstream-net]
+
+  order-service:
+    build:
+      context: ./services/order-service
+      target: final
+    image: ${DOCKER_USERNAME:-local}/shopstream-order:latest
+    ports: ["3003:3003"]
+    environment: [NODE_ENV=development, PORT=3003]
+    networks: [shopstream-net]
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      target: final
+    image: ${DOCKER_USERNAME:-local}/shopstream-notification:latest
+    ports: ["3004:3004"]
+    environment: [NODE_ENV=development, PORT=3004]
+    networks: [shopstream-net]
+
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      target: final
+    image: ${DOCKER_USERNAME:-local}/shopstream-analytics:latest
+    ports: ["3005:3005"]
+    environment: [NODE_ENV=development, PORT=3005]
+    networks: [shopstream-net]
