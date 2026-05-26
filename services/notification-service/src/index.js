@@ -48,7 +48,7 @@ app.post('/notify', (req, res) =>
   })
 );
 
-app.get('/notifications', (req, res) =>
+app.get('/notification', (req, res) =>
   res.json([{ id: 1, type: 'email', status: 'sent' }])
 );
 
