@@ -1,11 +1,11 @@
 # Stage 1: build
-FROM node:18-alpine AS builder
+FROM node:20-alpine3.22 AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --only=production
 
 # Stage 2: final image — no devDependencies, no npm cache
-FROM node:18-alpine AS final
+FROM node:20-alpine3.22 AS final
 WORKDIR /app
 
 # Security: don't run as root
