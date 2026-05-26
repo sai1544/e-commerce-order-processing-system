@@ -2,16 +2,11 @@ name: CI — build, scan, push
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
     paths:
       - 'services/**'
-      - '.github/workflows/ci.yml'
-
-  pull_request:
-    branches: [main]
-    paths:
-      - 'services/**'
-      - '.github/workflows/ci.yml'
+      - '.github/workflows/**'
 
 env:
   REGISTRY: docker.io
@@ -19,7 +14,6 @@ env:
 
 jobs:
 
-  # Detect which services changed
   changes:
     runs-on: ubuntu-latest
 
@@ -35,8 +29,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Detect changed services
-        uses: dorny/paths-filter@v3
         id: filter
+        uses: dorny/paths-filter@v3
+
         with:
           filters: |
             user:
@@ -55,12 +50,9 @@ jobs:
               - 'services/analytics-service/**'
 
   build-scan-push:
-    name: ${{ matrix.service }}
+    name: Build — ${{ matrix.service }}
 
     needs: changes
-
-    # Only build changed service
-    if: ${{ needs.changes.outputs[matrix.service] == 'true' }}
 
     runs-on: ubuntu-latest
 
@@ -68,12 +60,23 @@ jobs:
       fail-fast: false
 
       matrix:
-        service:
-          - user
-          - product
-          - order
-          - notification
-          - analytics
+        include:
+          - service: user
+            changed: ${{ needs.changes.outputs.user }}
+
+          - service: product
+            changed: ${{ needs.changes.outputs.product }}
+
+          - service: order
+            changed: ${{ needs.changes.outputs.order }}
+
+          - service: notification
+            changed: ${{ needs.changes.outputs.notification }}
+
+          - service: analytics
+            changed: ${{ needs.changes.outputs.analytics }}
+
+    if: matrix.changed == 'true'
 
     permissions:
       contents: read
@@ -88,24 +91,28 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to DockerHub
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main'
+
         uses: docker/login-action@v3
+
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Extract metadata (tags + labels)
+      - name: Extract metadata
         id: meta
+
         uses: docker/metadata-action@v5
+
         with:
           images: ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}
 
           tags: |
-            type=sha,prefix=,suffix=,format=short
+            type=sha,format=short
             type=ref,event=branch
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build image (with layer cache)
+      - name: Build image
         uses: docker/build-push-action@v5
 
         with:
@@ -115,8 +122,7 @@ jobs:
           push: false
           load: true
 
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: localbuild/${{ matrix.service }}:latest
 
           cache-from: type=gha
           cache-to: type=gha,mode=max
@@ -125,7 +131,7 @@ jobs:
         uses: aquasecurity/trivy-action@master
 
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
+          image-ref: localbuild/${{ matrix.service }}:latest
 
           format: sarif
           output: trivy-${{ matrix.service }}.sarif
@@ -134,10 +140,10 @@ jobs:
 
           exit-code: 0
 
-      - name: Upload Trivy results to GitHub Security
-        uses: github/codeql-action/upload-sarif@v3
-
+      - name: Upload Trivy results
         if: always()
+
+        uses: github/codeql-action/upload-sarif@v3
 
         with:
           sarif_file: trivy-${{ matrix.service }}.sarif
@@ -147,21 +153,20 @@ jobs:
         uses: aquasecurity/trivy-action@master
 
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}-${{ matrix.service }}:latest
+          image-ref: localbuild/${{ matrix.service }}:latest
 
           format: table
           severity: CRITICAL
 
           exit-code: 1
 
-      - name: Push to DockerHub
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+      - name: Push image to DockerHub
+        if: github.ref == 'refs/heads/main'
 
         uses: docker/build-push-action@v5
 
         with:
           context: ./services/${{ matrix.service }}-service
-
           target: final
 
           push: true
